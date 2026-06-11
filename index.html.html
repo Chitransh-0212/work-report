@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#080E1A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Work Report">
+<title>Office Daily Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#080E1A;font-family:'Inter',sans-serif;color:#F5F0E8;overflow-x:hidden}
+input,textarea,button{font-family:'Inter',sans-serif}
+input::placeholder,textarea::placeholder{color:rgba(245,240,232,0.28)}
+input:focus,textarea:focus{outline:none}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:rgba(212,168,67,0.25);border-radius:2px}
+@keyframes shimmer{0%{background-position:-200% center}100%{background-position:200% center}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes popIn{0%{transform:scale(0.82);opacity:0}65%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
+@keyframes checkAnim{0%{transform:scale(0) rotate(-25deg);opacity:0}70%{transform:scale(1.2) rotate(4deg)}100%{transform:scale(1) rotate(0);opacity:1}}
+@keyframes slideR{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:translateX(0)}}
+@keyframes glow{0%,100%{box-shadow:0 0 20px rgba(212,168,67,0.1)}50%{box-shadow:0 0 40px rgba(212,168,67,0.28)}}
+@keyframes dot{0%,80%,100%{opacity:.15;transform:scale(.8)}40%{opacity:1;transform:scale(1.1)}}
+@keyframes toastSlide{from{opacity:0;transform:translateX(-50%) translateY(14px) scale(0.92)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+@keyframes bar{from{width:0}to{width:var(--w)}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+/* ── CONSTANTS ── */
+const DEFAULT_TASKS = [
+  {en:"Fee Collection",hi:"शुल्क संग्रह"},
+  {en:"Student Attendance",hi:"उपस्थिति दर्ज"},
+  {en:"Document Verification",hi:"दस्तावेज़ जाँच"},
+  {en:"Meeting Attended",hi:"बैठक में शामिल"},
+  {en:"Notice Issued",hi:"नोटिस जारी"},
+  {en:"Visitor Handled",hi:"आगंतुक सेवा"},
+  {en:"File Work",hi:"फाइल कार्य"},
+  {en:"TC / Bonafide",hi:"TC/बोनाफाइड"},
+  {en:"Admission Work",hi:"प्रवेश कार्य"},
+  {en:"Record Updated",hi:"रिकॉर्ड अपडेट"},
+  {en:"Parent Meeting",hi:"अभिभावक वार्ता"},
+  {en:"Exam Duty",hi:"परीक्षा ड्यूटी"},
+  {en:"Correspondence",hi:"पत्राचार"},
+  {en:"Clerical Work",hi:"लिपिकीय कार्य"},
+];
+
+const DAYS_S   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const DAYS_F   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const MONTHS_S = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTHS_F = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const WEEK_LBL = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const WEEK_S   = ["M","T","W","T","F","S","S"];
+
+const PC = [
+  {bg:"#080E1A", card:"#111c30", accent:"#D4A843", accentDim:"rgba(212,168,67,0.18)", check:"#080E1A", role:"प्रशासक — Administrator"},
+  {bg:"#0a2018", card:"#112a1f", accent:"#4ade80", accentDim:"rgba(74,222,128,0.15)", check:"#0a2018", role:"स्टाफ सदस्य 1"},
+  {bg:"#200a0a", card:"#2a1111", accent:"#f87171", accentDim:"rgba(248,113,113,0.15)", check:"#200a0a", role:"स्टाफ सदस्य 2"},
+];
+const EMOJI = ["🧑‍💼","👨‍💼","👩‍💼"];
+
+/* ── HELPERS ── */
+const dkey = (d=new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const fmtS  = d => `${DAYS_S[d.getDay()]} ${d.getDate()} ${MONTHS_S[d.getMonth()]}`;
+const fmtF  = d => `${d.getDate()} ${MONTHS_F[d.getMonth()]} ${d.getFullYear()}`;
+
+const getWeek = () => {
+  const t=new Date(), dow=t.getDay(), m=new Date(t);
+  m.setDate(t.getDate()-(dow===0?6:dow-1));
+  return Array.from({length:7},(_,i)=>{const d=new Date(m);d.setDate(m.getDate()+i);return{d,k:dkey(d)};});
+};
+
+const ldCfg  = () => JSON.parse(localStorage.getItem("odrX_cfg")||"null") || {school:"CBSE School",email:"",names:["Administrator","Staff Member 1","Staff Member 2"],tasks:DEFAULT_TASKS};
+const svCfg  = c => localStorage.setItem("odrX_cfg",JSON.stringify(c));
+const ldLogs = ()  => JSON.parse(localStorage.getItem("odrX_logs")||"{}");
+const svLogs = l  => localStorage.setItem("odrX_logs",JSON.stringify(l));
+
+/* ── STYLED ATOMS ── */
+const Serif = ({children,style={}}) => <span style={{fontFamily:"'Cormorant Garamond',Georgia,serif",...style}}>{children}</span>;
+const Hindi = ({children,style={}}) => <span style={{fontFamily:"'Noto Sans Devanagari',sans-serif",...style}}>{children}</span>;
+
+const SectionLabel = ({en,hi}) => (
+  <div style={{display:"flex",alignItems:"center",gap:10,margin:"16px 0 10px"}}>
+    <span style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"1.4px",color:"rgba(245,240,232,0.32)"}}>
+      {en} {hi && <Hindi style={{textTransform:"none",letterSpacing:0,fontWeight:500,fontSize:11,color:"rgba(245,240,232,0.32)"}}>{hi}</Hindi>}
+    </span>
+    <div style={{flex:1,height:1,background:"rgba(255,255,255,0.06)"}}/>
+  </div>
+);
+
+const GoldBar = () => <div style={{height:3,background:"linear-gradient(90deg,#b88a20,#D4A843,#f0cc6a,#D4A843,#b88a20)",backgroundSize:"300% 100%",animation:"shimmer 4s linear infinite"}}/>;
+
+/* ── TOAST ── */
+const Toast = ({msg,on}) => (
+  <div style={{
+    position:"fixed",bottom:86,left:"50%",
+    transform:"translateX(-50%)",
+    background:"linear-gradient(135deg,#1a2640,#0f1a2e)",
+    border:"1px solid rgba(212,168,67,0.4)",
+    color:"#D4A843",padding:"12px 22px",borderRadius:40,
+    fontSize:13,fontWeight:600,zIndex:9999,
+    boxShadow:"0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(212,168,67,0.1)",
+    opacity:on?1:0,pointerEvents:"none",whiteSpace:"nowrap",
+    transition:"opacity 0.28s, transform 0.28s",
+    transform:on?"translateX(-50%) translateY(0)":"translateX(-50%) translateY(10px)",
+  }}>{msg}</div>
+);
+
+/* ── TASK CHIP ── */
+const TaskChip = ({task,sel,pidx,onToggle}) => {
+  const [press,setPress]=useState(false);
+  const c=PC[pidx];
+  return (
+    <div onClick={()=>{setPress(true);setTimeout(()=>setPress(false),140);onToggle(task.en);}}
+      style={{
+        display:"flex",alignItems:"center",gap:9,
+        background:sel?c.accentDim:"rgba(255,255,255,0.03)",
+        border:`1.5px solid ${sel?c.accent+"55":"rgba(255,255,255,0.07)"}`,
+        borderRadius:12,padding:"10px 11px",cursor:"pointer",
+        transition:"all 0.18s cubic-bezier(0.34,1.56,0.64,1)",
+        transform:press?"scale(0.93)":"scale(1)",userSelect:"none",
+      }}>
+      <div style={{
+        width:21,height:21,borderRadius:6,flexShrink:0,
+        background:sel?c.accent:"transparent",
+        border:`2px solid ${sel?c.accent:"rgba(255,255,255,0.18)"}`,
+        display:"flex",alignItems:"center",justifyContent:"center",
+        transition:"all 0.2s cubic-bezier(0.34,1.56,0.64,1)",
+        transform:sel?"scale(1)":"scale(0.88)",
+      }}>
+        {sel && <svg viewBox="0 0 12 9" fill="none" style={{width:10,height:8,animation:"checkAnim 0.22s ease"}}>
+          <path d="M1 4.5L4.2 7.8L11 1" stroke={c.check} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>}
+      </div>
+      <div>
+        <div style={{fontSize:12,fontWeight:sel?600:400,color:sel?"#F5F0E8":"rgba(245,240,232,0.6)",lineHeight:1.25,transition:"color 0.15s"}}>{task.en}</div>
+        {task.hi && <div style={{fontSize:9.5,color:"rgba(245,240,232,0.32)",fontFamily:"'Noto Sans Devanagari',sans-serif",marginTop:1}}>{task.hi}</div>}
+      </div>
+    </div>
+  );
+};
+
+/* ── PERSON PANEL ── */
+const PersonPanel = ({pidx,cfg,sel,cust,note,onToggle,onAddCust,onNote}) => {
+  const [ci,setCi]=useState("");
+  const c=PC[pidx];
+  const total=sel.length;
+  const allTasks=[...cfg.tasks,...cust.map(e=>({en:e,hi:""}))];
+  const pct=Math.min(100,cfg.tasks.length>0?(total/cfg.tasks.length)*100:0);
+
+  return (
+    <div style={{animation:"slideR 0.22s ease"}}>
+      {/* Hero card */}
+      <div style={{
+        borderRadius:20,padding:"20px 20px 16px",marginBottom:18,
+        background:`linear-gradient(135deg, ${c.bg} 0%, ${c.card} 100%)`,
+        border:`1px solid ${c.accent}20`,
+        position:"relative",overflow:"hidden",
+        animation:"glow 4s ease-in-out infinite",
+      }}>
+        <div style={{position:"absolute",top:-35,right:-35,width:130,height:130,borderRadius:"50%",background:`${c.accent}06`}}/>
+        <div style={{position:"absolute",bottom:-25,right:40,width:90,height:90,borderRadius:"50%",background:`${c.accent}04`}}/>
+        <div style={{display:"flex",alignItems:"center",gap:13,position:"relative"}}>
+          <div style={{
+            width:50,height:50,borderRadius:"50%",flexShrink:0,
+            background:`${c.accent}1a`,border:`2px solid ${c.accent}35`,
+            display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,
+          }}>{EMOJI[pidx]}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <Serif style={{fontSize:19,fontWeight:700,color:"#fff",display:"block",lineHeight:1.15,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+              {cfg.names[pidx]}
+            </Serif>
+            <Hindi style={{fontSize:10,color:`${c.accent}99`,marginTop:3,display:"block"}}>{c.role}</Hindi>
+          </div>
+          <div style={{
+            background:`${c.accent}22`,border:`1px solid ${c.accent}40`,
+            borderRadius:30,padding:"5px 14px",
+            fontSize:17,fontWeight:800,color:c.accent,flexShrink:0,
+          }}>{total}</div>
+        </div>
+        {/* Progress bar */}
+        <div style={{marginTop:14,height:4,background:"rgba(255,255,255,0.07)",borderRadius:4,overflow:"hidden",position:"relative"}}>
+          <div style={{
+            height:"100%",borderRadius:4,
+            background:`linear-gradient(90deg, ${c.accent}, ${c.accent}88)`,
+            width:`${pct}%`,transition:"width 0.5s cubic-bezier(0.34,1.56,0.64,1)",
+          }}/>
+        </div>
+        <div style={{fontSize:10,color:"rgba(255,255,255,0.28)",marginTop:5,textAlign:"right"}}>
+          {total} of {cfg.tasks.length} tasks completed
+        </div>
+      </div>
+
+      <SectionLabel en="Tasks Done Today" hi="/ आज के कार्य"/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
+        {allTasks.map(t=>(
+          <TaskChip key={t.en} task={t} sel={sel.includes(t.en)} pidx={pidx} onToggle={onToggle}/>
+        ))}
+      </div>
+
+      {/* Add custom */}
+      <div style={{display:"flex",gap:8,marginTop:12}}>
+        <input value={ci} onChange={e=>setCi(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&ci.trim()){onAddCust(ci.trim());setCi("")}}}
+          placeholder="Other task / अन्य कार्य..."
+          style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1.5px solid rgba(255,255,255,0.09)",borderRadius:11,padding:"10px 13px",fontSize:13,color:"#F5F0E8",transition:"border-color 0.2s"}}
+          onFocus={e=>e.target.style.borderColor=`${c.accent}55`}
+          onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.09)"}
+        />
+        <button onClick={()=>{if(!ci.trim())return;onAddCust(ci.trim());setCi("");}}
+          style={{background:c.accent,color:c.check,border:"none",borderRadius:11,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer",transition:"transform 0.14s"}}
+          onMouseDown={e=>e.currentTarget.style.transform="scale(0.93)"}
+          onMouseUp={e=>e.currentTarget.style.transform="scale(1)"}
+        >+ Add</button>
+      </div>
+
+      <SectionLabel en="Remarks" hi="/ टिप्पणी"/>
+      <textarea value={note} onChange={e=>onNote(e.target.value)} rows={2}
+        placeholder="Optional note about today's work..."
+        style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1.5px solid rgba(255,255,255,0.08)",borderRadius:12,padding:"11px 14px",fontSize:13,color:"#F5F0E8",resize:"none",lineHeight:1.65,transition:"border-color 0.2s"}}
+        onFocus={e=>e.target.style.borderColor=`${c.accent}50`}
+        onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.08)"}
+      />
+    </div>
+  );
+};
+
+/* ── LOG PAGE ── */
+const LogPage = ({cfg,showToast}) => {
+  const [ap,setAp]=useState(0);
+  const [sel,setSel]=useState([[],[],[]]);
+  const [cust,setCust]=useState([[],[],[]]);
+  const [nts,setNts]=useState(["","",""]);
+  const [saving,setSaving]=useState(false);
+
+  useEffect(()=>{
+    const s=ldLogs()[dkey()];
+    if(s){setSel(s.sel||[[],[],[]]);setCust(s.cust||[[],[],[]]);setNts(s.nts||["","",""]);}
+  },[]);
+
+  const toggle = n => setSel(p=>{const x=[...p];const i=x[ap].indexOf(n);x[ap]=i===-1?[...x[ap],n]:x[ap].filter(t=>t!==n);return x;});
+  const addC   = v => {setCust(p=>{const x=[...p];x[ap]=[...x[ap],v];return x;});setSel(p=>{const x=[...p];x[ap]=[...x[ap],v];return x;});};
+  const setNote= v => setNts(p=>{const x=[...p];x[ap]=v;return x;});
+
+  const saveDay = () => {
+    setSaving(true);
+    const logs=ldLogs();logs[dkey()]={sel,cust,nts,at:new Date().toISOString()};svLogs(logs);
+    setTimeout(()=>{setSaving(false);showToast("✅  Saved! आज का काम सेव हो गया।");},400);
+  };
+
+  const totalToday=sel.reduce((a,s)=>a+s.length,0);
+
+  return (
+    <div style={{padding:"14px 15px 115px"}}>
+      {/* Person tabs */}
+      <div style={{display:"flex",gap:8,marginBottom:18,overflowX:"auto",paddingBottom:3}}>
+        {cfg.names.map((name,p)=>{
+          const c=PC[p], active=ap===p;
+          return (
+            <button key={p} onClick={()=>setAp(p)} style={{
+              flexShrink:0,border:`1.5px solid ${active?c.accent:"rgba(255,255,255,0.09)"}`,
+              background:active?`${c.accent}18`:"rgba(255,255,255,0.03)",
+              borderRadius:30,padding:"9px 17px",
+              fontSize:12,fontWeight:700,cursor:"pointer",
+              color:active?c.accent:"rgba(245,240,232,0.45)",
+              transition:"all 0.22s cubic-bezier(0.34,1.56,0.64,1)",
+              transform:active?"scale(1.05)":"scale(1)",
+            }}>
+              {EMOJI[p]} {name}
+              {sel[p].length>0 && <span style={{
+                display:"inline-block",background:c.accent,color:c.check,
+                borderRadius:20,padding:"1px 7px",fontSize:10,fontWeight:800,marginLeft:6,
+                animation:"popIn 0.2s ease",
+              }}>{sel[p].length}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      <PersonPanel pidx={ap} cfg={cfg} sel={sel[ap]} cust={cust[ap]} note={nts[ap]} onToggle={toggle} onAddCust={addC} onNote={setNote}/>
+
+      <button onClick={saveDay} style={{
+        width:"100%",marginTop:20,padding:"16px 0",
+        background:saving?"rgba(212,168,67,0.55)":"linear-gradient(135deg,#D4A843 0%,#b88a20 100%)",
+        color:"#080E1A",border:"none",borderRadius:16,
+        fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:700,
+        cursor:"pointer",letterSpacing:"0.3px",
+        boxShadow:saving?"none":"0 4px 28px rgba(212,168,67,0.28)",
+        transition:"all 0.2s",transform:saving?"scale(0.98)":"scale(1)",
+        display:"flex",flexDirection:"column",alignItems:"center",gap:3,
+      }}>
+        {saving?"Saving…":"Save Today's Work"}
+        <Hindi style={{fontSize:13,fontWeight:400,opacity:0.7}}>आज का काम सेव करें</Hindi>
+      </button>
+      {totalToday>0 && <div style={{textAlign:"center",marginTop:9,fontSize:11,color:"rgba(212,168,67,0.55)",fontWeight:500}}>
+        {totalToday} task{totalToday!==1?"s":""} logged today across all staff
+      </div>}
+    </div>
+  );
+};
+
+/* ── WEEK PAGE ── */
+const WeekPage = ({cfg,showToast}) => {
+  const [rep,setRep]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [done,setDone]=useState(false);
+  const week=getWeek(), logs=ldLogs(), todK=dkey();
+  const daysLogged=week.filter(({k})=>{const l=logs[k];return l&&l.sel&&l.sel.some(s=>s.length>0);}).length;
+  const totalTasks=week.reduce((a,{k})=>{const l=logs[k];return a+(l?l.sel.reduce((b,s)=>b+s.length,0):0);},0);
+
+  const gen = async () => {
+    let raw="",any=false;
+    week.forEach(({d,k})=>{
+      const l=logs[k];if(!l||!l.sel.some(s=>s.length>0))return;
+      any=true;raw+=`\n${fmtS(d)}:\n`;
+      l.sel.forEach((s,p)=>{if(s.length){raw+=`  ${cfg.names[p]}: ${s.join(", ")}`;if(l.nts?.[p])raw+=` (Note: ${l.nts[p]})`;raw+="\n";}});
+    });
+    if(!any){showToast("⚠️  No work logged this week yet");return;}
+    setLoading(true);setDone(false);
+    const w0=fmtF(week[0].d),w6=fmtF(week[6].d);
+    const prompt=`You are writing a formal weekly work progress report for the Chairman of ${cfg.school}, a reputed CBSE school in India.
+
+Reporting Period: ${w0} to ${w6}
+Office Staff:
+1. ${cfg.names[0]} — Administrator (Head of Office)
+2. ${cfg.names[1]} — Office Staff Member
+3. ${cfg.names[2]} — Office Staff Member
+
+Work completed this week:
+${raw}
+
+Write a concise, formal report in exactly 3 paragraphs (~200 words total). Rules:
+- Flowing paragraphs only, no bullet points
+- Formal, respectful English worthy of a reputed CBSE institution
+- Para 1: brief week overview. Para 2: administrator's work. Para 3: staff contributions + closing
+- End with: "Respectfully submitted,\n${cfg.names[0]}\nAdministrator\n${cfg.school}"`;
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:900,messages:[{role:"user",content:prompt}]}),
+      });
+      const data=await res.json();
+      const txt=data.content?.[0]?.text||"";
+      if(!txt)throw new Error("empty");
+      setRep(txt);setDone(true);
+    }catch{showToast("❌  Could not generate — check your connection");}
+    setLoading(false);
+  };
+
+  const copy=()=>navigator.clipboard.writeText(rep).then(()=>showToast("📋  Copied to clipboard!"));
+  const wa=()=>window.open("https://wa.me/?text="+encodeURIComponent(rep),"_blank");
+  const email=()=>window.open(`mailto:${cfg.email||""}?subject=${encodeURIComponent("Weekly Work Report – "+cfg.school)}&body=${encodeURIComponent(rep)}`,"_blank");
+
+  return (
+    <div style={{padding:"14px 15px 115px"}}>
+      {/* Week banner */}
+      <div style={{borderRadius:20,padding:"20px",marginBottom:14,background:"linear-gradient(135deg,#0f1a2e,#1a2640)",border:"1px solid rgba(212,168,67,0.18)",position:"relative",overflow:"hidden",animation:"glow 4s ease-in-out infinite"}}>
+        <div style={{position:"absolute",top:-55,right:-55,width:200,height:200,borderRadius:"50%",background:"rgba(212,168,67,0.04)"}}/>
+        <Serif style={{fontSize:24,fontWeight:700,color:"#D4A843",display:"block",position:"relative"}}>Weekly Summary</Serif>
+        <div style={{fontSize:11,color:"rgba(245,240,232,0.38)",marginTop:4,position:"relative"}}>
+          <Hindi style={{fontSize:11}}>{fmtF(week[0].d)} — {fmtF(week[6].d)}</Hindi>
+        </div>
+        {/* Day dots */}
+        <div style={{display:"flex",gap:6,marginTop:14,position:"relative"}}>
+          {week.map(({k},i)=>{
+            const l=logs[k],has=l&&l.sel&&l.sel.some(s=>s.length>0),isT=k===todK;
+            return <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+              <div style={{height:5,width:"100%",borderRadius:3,background:isT?"#D4A843":has?"rgba(212,168,67,0.5)":"rgba(255,255,255,0.09)",boxShadow:isT?"0 0 8px rgba(212,168,67,0.55)":"none",transition:"all 0.3s"}}/>
+              <div style={{fontSize:9,color:"rgba(245,240,232,0.28)",fontWeight:700}}>{WEEK_S[i]}</div>
+            </div>;
+          })}
+        </div>
+        {/* Stats */}
+        <div style={{display:"flex",gap:16,marginTop:12,position:"relative"}}>
+          {[{v:daysLogged,l:"DAYS LOGGED"},{v:totalTasks,l:"TOTAL TASKS"}].map((s,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:i===0?12:0}}>
+              {i===1 && <div style={{width:1,height:30,background:"rgba(255,255,255,0.08)",marginRight:16}}/>}
+              <div>
+                <div style={{fontSize:24,fontWeight:800,color:"#D4A843",lineHeight:1}}>{s.v}</div>
+                <div style={{fontSize:9,color:"rgba(245,240,232,0.3)",letterSpacing:"0.7px",marginTop:2}}>{s.l}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Day cards */}
+      {week.map(({d,k},i)=>{
+        const l=logs[k],has=l&&l.sel&&l.sel.some(s=>s.length>0),isT=k===todK;
+        return <div key={k} style={{background:"rgba(255,255,255,0.035)",borderRadius:12,border:`1px solid ${isT?"rgba(212,168,67,0.28)":"rgba(255,255,255,0.06)"}`,marginBottom:8,overflow:"hidden",transition:"all 0.2s"}}>
+          <div style={{padding:"9px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",background:isT?"rgba(212,168,67,0.07)":"rgba(255,255,255,0.025)",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+            <div style={{fontSize:12,fontWeight:700,color:isT?"#D4A843":"rgba(245,240,232,0.65)"}}>{WEEK_LBL[i]} · {fmtS(d)}{isT?" ← Today":""}</div>
+            <div style={{fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:20,background:has?"rgba(74,222,128,0.1)":"rgba(255,255,255,0.05)",color:has?"#4ade80":"rgba(245,240,232,0.28)",border:`1px solid ${has?"rgba(74,222,128,0.22)":"rgba(255,255,255,0.07)"}`}}>
+              {has?"✓ Logged":"No entry"}
+            </div>
+          </div>
+          {has && <div style={{padding:"9px 14px"}}>
+            {l.sel.map((s,p)=>s.length>0&&<div key={p} style={{fontSize:12,color:"rgba(245,240,232,0.55)",marginBottom:3,lineHeight:1.55}}>
+              <span style={{fontWeight:700,color:PC[p].accent}}>{cfg.names[p]}:</span> {s.join(", ")}
+            </div>)}
+          </div>}
+        </div>;
+      })}
+
+      {/* Generate */}
+      <button onClick={gen} disabled={loading} style={{
+        width:"100%",marginTop:12,padding:"16px",
+        background:loading?"rgba(212,168,67,0.45)":"linear-gradient(135deg,#D4A843,#b88a20)",
+        color:"#080E1A",border:"none",borderRadius:16,
+        fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:700,
+        cursor:loading?"wait":"pointer",boxShadow:loading?"none":"0 4px 24px rgba(212,168,67,0.22)",
+        transition:"all 0.2s",display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+      }}>
+        {loading ? <><span style={{display:"flex",gap:5}}>{[0,1,2].map(i=><span key={i} style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:"#080E1A",animation:`dot 1.2s ${i*0.2}s ease infinite`}}/>)}</span> Generating…</>
+          : <>✨ {done?"Regenerate":"Generate"} AI Report</>}
+      </button>
+      <div style={{textAlign:"center",fontSize:11,color:"rgba(212,168,67,0.4)",marginTop:5}}>
+        <Hindi style={{fontSize:11}}>AI से रिपोर्ट बनाएं • चेयरमैन को भेजें</Hindi>
+      </div>
+
+      {/* Report */}
+      {done && rep && <div style={{marginTop:16,background:"rgba(255,255,255,0.03)",border:"1.5px solid rgba(212,168,67,0.22)",borderRadius:20,overflow:"hidden",animation:"fadeUp 0.32s ease"}}>
+        <div style={{background:"linear-gradient(135deg,rgba(212,168,67,0.13),rgba(212,168,67,0.05))",padding:"14px 17px",borderBottom:"1px solid rgba(212,168,67,0.14)",display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:22}}>📄</span>
+          <div>
+            <Serif style={{fontSize:15,fontWeight:700,color:"#D4A843",display:"block"}}>Weekly Work Report</Serif>
+            <Hindi style={{fontSize:11,color:"rgba(245,240,232,0.38)"}}>{fmtF(week[0].d)} to {fmtF(week[6].d)}</Hindi>
+          </div>
+        </div>
+        <div style={{padding:"17px",fontSize:13,lineHeight:1.87,color:"rgba(245,240,232,0.82)",whiteSpace:"pre-wrap"}}>{rep}</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,padding:"13px"}}>
+          <button onClick={copy} style={{borderRadius:12,padding:"13px 8px",border:"1.5px solid rgba(255,255,255,0.09)",background:"rgba(255,255,255,0.04)",color:"rgba(245,240,232,0.75)",fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+            <span style={{fontSize:20}}>📋</span>Copy
+          </button>
+          <button onClick={wa} style={{borderRadius:12,padding:"13px 8px",border:"none",background:"#25d366",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+            <span style={{fontSize:20}}>💬</span>WhatsApp
+          </button>
+          <button onClick={email} style={{gridColumn:"span 2",borderRadius:12,padding:"14px",border:"none",background:"linear-gradient(135deg,#D4A843,#b88a20)",color:"#080E1A",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"'Cormorant Garamond',serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+            <span style={{fontSize:20}}>📧</span> Send to Chairman
+          </button>
+        </div>
+      </div>}
+    </div>
+  );
+};
+
+/* ── SETTINGS PAGE ── */
+const SettingsPage = ({cfg,setCfg,showToast}) => {
+  const [school,setSchool]=useState(cfg.school);
+  const [email,setEmail]=useState(cfg.email||"");
+  const [names,setNames]=useState([...cfg.names]);
+  const [tasks,setTasks]=useState([...cfg.tasks]);
+  const [nEn,setNEn]=useState(""), [nHi,setNHi]=useState("");
+
+  const fi = (val,set,ph,type="text",extra={}) => (
+    <input type={type} value={val} onChange={e=>set(e.target.value)} placeholder={ph}
+      style={{width:"100%",background:"rgba(255,255,255,0.04)",border:"1.5px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"11px 14px",fontSize:14,color:"#F5F0E8",transition:"border-color 0.2s",...extra}}
+      onFocus={e=>e.target.style.borderColor="rgba(212,168,67,0.5)"}
+      onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.08)"}
+    />
+  );
+
+  const Card=({title,children})=>(
+    <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:16,marginBottom:13,overflow:"hidden"}}>
+      <div style={{background:"linear-gradient(135deg,#1a2640,#0f1a2e)",padding:"12px 16px",borderBottom:"1px solid rgba(212,168,67,0.12)",display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:3,height:16,background:"#D4A843",borderRadius:2}}/>
+        <Serif style={{fontSize:15,fontWeight:700,color:"#D4A843"}}>{title}</Serif>
+      </div>
+      {children}
+    </div>
+  );
+  const Row=({children,last})=><div style={{padding:"13px 16px",borderBottom:last?"none":"1px solid rgba(255,255,255,0.05)"}}>{children}</div>;
+  const Lbl=({en,hi})=><div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:"1.2px",color:"rgba(245,240,232,0.32)",marginBottom:7}}>{en} {hi&&<Hindi style={{textTransform:"none",letterSpacing:0,fontWeight:500,fontSize:11}}>{hi}</Hindi>}</div>;
+
+  const save=()=>{
+    const nc={...cfg,school,email,names,tasks};setCfg(nc);svCfg(nc);
+    showToast("✅  Settings saved! सेटिंग सेव हो गई।");
+  };
+
+  return (
+    <div style={{padding:"14px 15px 115px"}}>
+      <Card title="🏫  School Details">
+        <Row><Lbl en="School Name" hi="/ विद्यालय का नाम"/>{fi(school,setSchool,"e.g. Kendriya Vidyalaya No. 1")}</Row>
+        <Row last><Lbl en="Chairman's Email" hi="/ चेयरमैन का ईमेल"/>{fi(email,setEmail,"chairman@school.com","email")}</Row>
+      </Card>
+
+      <Card title="👤  Staff Names / स्टाफ के नाम">
+        {["Administrator (You)","Staff Member 1 / स्टाफ 1","Staff Member 2 / स्टाफ 2"].map((lbl,i)=>(
+          <Row key={i} last={i===2}>
+            <Lbl en={lbl}/>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:34,height:34,borderRadius:"50%",flexShrink:0,background:`${PC[i].accent}18`,border:`1px solid ${PC[i].accent}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>{EMOJI[i]}</div>
+              <input value={names[i]} onChange={e=>{const n=[...names];n[i]=e.target.value;setNames(n);}} placeholder={`Full name`}
+                style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1.5px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"10px 13px",fontSize:14,color:"#F5F0E8",transition:"border-color 0.2s"}}
+                onFocus={e=>e.target.style.borderColor=`${PC[i].accent}55`}
+                onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.08)"}
+              />
+            </div>
+          </Row>
+        ))}
+      </Card>
+
+      <Card title="✅  Task Checklist / कार्य सूची">
+        <div style={{maxHeight:230,overflowY:"auto"}}>
+          {tasks.map((t,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 16px",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+              <div><div style={{fontSize:13,fontWeight:600,color:"rgba(245,240,232,0.75)"}}>{t.en}</div>{t.hi&&<Hindi style={{fontSize:10,color:"rgba(245,240,232,0.32)"}}>{t.hi}</Hindi>}</div>
+              <button onClick={()=>setTasks(p=>p.filter((_,j)=>j!==i))} style={{background:"rgba(248,113,113,0.1)",border:"none",color:"#f87171",borderRadius:7,width:28,height:28,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+            </div>
+          ))}
+        </div>
+        <Row last>
+          <Lbl en="Add New Task" hi="/ नया कार्य जोड़ें"/>
+          <div style={{display:"flex",gap:7}}>
+            <input value={nEn} onChange={e=>setNEn(e.target.value)} placeholder="English"
+              style={{flex:1,background:"rgba(255,255,255,0.04)",border:"1.5px solid rgba(255,255,255,0.08)",borderRadius:9,padding:"9px 12px",fontSize:13,color:"#F5F0E8"}}
+              onFocus={e=>e.target.style.borderColor="rgba(212,168,67,0.5)"} onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.08)"}
+            />
+            <input value={nHi} onChange={e=>setNHi(e.target.value)} placeholder="हिंदी"
+              style={{width:82,background:"rgba(255,255,255,0.04)",border:"1.5px solid rgba(255,255,255,0.08)",borderRadius:9,padding:"9px 11px",fontSize:13,color:"#F5F0E8",fontFamily:"'Noto Sans Devanagari',sans-serif"}}
+              onFocus={e=>e.target.style.borderColor="rgba(212,168,67,0.5)"} onBlur={e=>e.target.style.borderColor="rgba(255,255,255,0.08)"}
+            />
+            <button onClick={()=>{if(!nEn.trim())return;setTasks(p=>[...p,{en:nEn.trim(),hi:nHi.trim()}]);setNEn("");setNHi("");showToast("✅  Task added!");}}
+              style={{background:"#D4A843",color:"#080E1A",border:"none",borderRadius:9,padding:"9px 13px",fontSize:13,fontWeight:700,cursor:"pointer"}}>+ Add</button>
+          </div>
+        </Row>
+      </Card>
+
+      <button onClick={save} style={{width:"100%",padding:"16px",background:"linear-gradient(135deg,#1e6b4a,#2d9b6f)",color:"#fff",border:"none",borderRadius:16,fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 20px rgba(30,107,74,0.25)"}}>
+        ✅  Save Settings
+      </button>
+    </div>
+  );
+};
+
+/* ── APP ── */
+const NAV=[{id:"log",icon:"✍️",l:"Log Work",h:"कार्य दर्ज"},{id:"week",icon:"📊",l:"Weekly",h:"साप्ताहिक"},{id:"set",icon:"⚙️",l:"Settings",h:"सेटिंग"}];
+
+function App(){
+  const [page,setPage]=useState("log");
+  const [cfg,setCfg]=useState(ldCfg);
+  const [toast,setToast]=useState({msg:"",on:false});
+  const tRef=useRef(null);
+
+  const showToast=useCallback(msg=>{
+    if(tRef.current)clearTimeout(tRef.current);
+    setToast({msg,on:true});
+    tRef.current=setTimeout(()=>setToast(p=>({...p,on:false})),2800);
+  },[]);
+
+  const now=new Date();
+  const logs=ldLogs();
+  const week=getWeek();
+  const daysL=week.filter(({k})=>{const l=logs[k];return l&&l.sel&&l.sel.some(s=>s.length>0);}).length;
+  const todayTasks=logs[dkey()]?.sel?.reduce((a,s)=>a+s.length,0)||0;
+  const weekTasks=week.reduce((a,{k})=>{const l=logs[k];return a+(l?l.sel.reduce((b,s)=>b+s.length,0):0);},0);
+
+  return (
+    <div style={{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:"#080E1A"}}>
+      {/* HEADER */}
+      <div style={{background:"#080E1A",position:"sticky",top:0,zIndex:100,borderBottom:"1px solid rgba(212,168,67,0.1)"}}>
+        <GoldBar/>
+        <div style={{padding:"13px 17px 11px",display:"flex",alignItems:"center",gap:13}}>
+          <div style={{width:46,height:46,borderRadius:"50%",flexShrink:0,background:"linear-gradient(135deg,#D4A843,#8a6a1f)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,boxShadow:"0 0 0 2px rgba(212,168,67,0.18),0 4px 14px rgba(212,168,67,0.14)"}}>🏛️</div>
+          <div style={{flex:1,minWidth:0}}>
+            <Serif style={{fontSize:16,fontWeight:700,color:"#F5F0E8",display:"block",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cfg.school}</Serif>
+            <div style={{fontSize:9,color:"rgba(212,168,67,0.55)",marginTop:2,letterSpacing:"0.8px"}}>OFFICE WORK REPORT SYSTEM</div>
+          </div>
+          <div style={{flexShrink:0,textAlign:"center",background:"rgba(212,168,67,0.07)",border:"1px solid rgba(212,168,67,0.18)",borderRadius:10,padding:"6px 10px"}}>
+            <div style={{fontSize:18,fontWeight:800,color:"#D4A843",lineHeight:1}}>{now.getDate()}</div>
+            <div style={{fontSize:9,color:"rgba(212,168,67,0.55)",letterSpacing:"0.5px"}}>{MONTHS_S[now.getMonth()].toUpperCase()}</div>
+          </div>
+        </div>
+        {/* Stats strip */}
+        <div style={{display:"flex",borderTop:"1px solid rgba(255,255,255,0.05)"}}>
+          {[{v:todayTasks,l:"TODAY",h:"आज"},{v:weekTasks,l:"WEEK",h:"सप्ताह"},{v:`${daysL}/7`,l:"DAYS",h:"दिन"}].map((s,i)=>(
+            <div key={i} style={{flex:1,padding:"8px 0",textAlign:"center",borderRight:i<2?"1px solid rgba(255,255,255,0.05)":"none"}}>
+              <div style={{fontSize:18,fontWeight:800,color:"#D4A843",lineHeight:1}}>{s.v}</div>
+              <div style={{fontSize:8.5,color:"rgba(245,240,232,0.28)",marginTop:2,letterSpacing:"0.6px"}}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+        {/* Nav */}
+        <div style={{display:"flex",background:"#0a1220"}}>
+          {NAV.map(n=>{
+            const active=page===n.id;
+            return <button key={n.id} onClick={()=>setPage(n.id)} style={{
+              flex:1,border:"none",background:"transparent",cursor:"pointer",
+              padding:"9px 4px 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+              color:active?"#D4A843":"rgba(245,240,232,0.3)",transition:"color 0.18s",
+              position:"relative",borderBottom:`2px solid ${active?"#D4A843":"transparent"}`,
+            }}>
+              <span style={{fontSize:18,lineHeight:1}}>{n.icon}</span>
+              <span style={{fontSize:10,fontWeight:active?700:500,letterSpacing:"0.3px"}}>{n.l}</span>
+              <Hindi style={{fontSize:9,opacity:0.65}}>{n.h}</Hindi>
+            </button>;
+          })}
+        </div>
+      </div>
+
+      {/* PAGES */}
+      <div key={page} style={{animation:"fadeUp 0.24s ease"}}>
+        {page==="log"  && <LogPage  cfg={cfg} showToast={showToast}/>}
+        {page==="week" && <WeekPage cfg={cfg} showToast={showToast}/>}
+        {page==="set"  && <SettingsPage cfg={cfg} setCfg={setCfg} showToast={showToast}/>}
+      </div>
+
+      <Toast msg={toast.msg} on={toast.on}/>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
